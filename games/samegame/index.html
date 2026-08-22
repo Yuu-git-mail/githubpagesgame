@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, minimum-scale=1.0">
+  <title>さめがめ - Game Hub</title>
+  <link rel="stylesheet" href="../../css/common.css">
+  <style>
+    .info-container {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.8rem;
+      width: 100%;
+      max-width: 360px;
+      margin-bottom: 1.0rem;
+    }
+    .info-box {
+      flex: 1;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.8rem;
+      padding: 0.6rem;
+      text-align: center;
+      box-shadow: 0 2px 4px var(--shadow-color);
+    }
+    .info-title {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .info-num {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: var(--accent-color);
+    }
+    .action-row {
+      display: flex;
+      gap: 1.0rem;
+      width: 100%;
+      max-width: 360px;
+      margin-top: 1.0rem;
+    }
+    .btn-action-half {
+      flex: 1;
+      padding: 0.8rem;
+      font-size: 1.4rem;
+      font-weight: bold;
+    }
+    .game-modal {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #ffffff;
+      border-radius: 0.8rem;
+      z-index: 20;
+    }
+    .game-modal h2 {
+      font-size: 2.8rem;
+      margin-bottom: 0.5rem;
+    }
+    .game-modal p {
+      font-size: 1.5rem;
+      margin-bottom: 1.2rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <header id="game-header" data-title="さめがめ" data-back="../../index.html" data-reset></header>
+
+  <div class="container">
+    <div class="game-container">
+      <div class="info-container">
+        <div class="info-box">
+          <div class="info-title">SCORE</div>
+          <div class="info-num" id="score-val">0</div>
+        </div>
+        <div class="info-box">
+          <div class="info-title">BEST</div>
+          <div class="info-num" id="best-val">0</div>
+        </div>
+        <div class="info-box">
+          <div class="info-title">REMAIN</div>
+          <div class="info-num" id="remain-val">100</div>
+        </div>
+      </div>
+
+      <div class="game-canvas-wrapper">
+        <canvas id="game-canvas" width="360" height="360" class="game-canvas"></canvas>
+        <div id="game-over-modal" class="game-modal" style="display: none;">
+          <h2 id="modal-title" style="color: #4ade80;">FINISH!</h2>
+          <p id="modal-msg">スコア: 0<br>残ったブロック: 0個</p>
+          <button class="btn" onclick="window.resetGame()">もう一度プレイ</button>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button class="btn btn-secondary btn-action-half" id="btn-undo">↩ 1手戻す (Undo)</button>
+        <button class="btn btn-action-half" id="btn-newgame" onclick="window.resetGame()">🔄 配列やり直し</button>
+      </div>
+
+      <div class="instructions-card">
+        <h2 class="h2-heading">💡 遊び方</h2>
+        <p class="text-s">
+          ・<b>ブロック選択</b>: 2つ以上隣接する同色コマをタップして選択（予想得点が表示されます）<br>
+          ・<b>消去</b>: 選択状態のグループを再度タップすると一括消去されます！<br>
+          ・<b>落下＆詰め</b>: 空きスペースが空くと上のブロックが落下し、空の列は左へ詰められます。<br>
+          ・<b>全消しボーナス</b>: 盤面上のブロックを全消去すると+1000ptの特別ボーナス獲得！
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <footer id="game-footer"></footer>
+  <script src="../../js/common.js"></script>
+  <script>
+    // ==========================================
+    // さめがめ (SameGame) ゲームエンジン
+    // ==========================================
+    const COLS = 10;
+    const ROWS = 10;
+    const CANVAS_SIZE = 360;
+    const CELL_SIZE = CANVAS_SIZE / COLS; // 36px
+
+    const BLOCK_COLORS = [
+      { id: 1, color: '#ef4444', label: '🔴' }, // 赤
+      { id: 2, color: '#3b82f6', label: '🔵' }, // 青
+      { id: 3, color: '#22c55e', label: '🟢' }, // 緑
+      { id: 4, color: '#eab308', label: '🟡' }, // 黄
+      { id: 5, color: '#a855f7', label: '🟣' }  // 紫
+    ];
+
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+
+    let board = [];
+    let score = 0;
+    let bestScore = parseInt(localStorage.getItem('samegame_best') || '0', 10);
+    let selectedGroup = []; // Array of { r, c }
+    let undoStack = []; // History for undo: { board, score }
+    let gameOver = false;
+
+    function initBoard() {
+      board = [];
+      for (let r = 0; r < ROWS; r++) {
+        board[r] = [];
+        for (let c = 0; c < COLS; c++) {
+          const randomType = BLOCK_COLORS[Math.floor(Math.random() * BLOCK_COLORS.length)].id;
+          board[r][c] = randomType;
+        }
+      }
+      score = 0;
+      selectedGroup = [];
+      undoStack = [];
+      gameOver = false;
+
+      document.getElementById('game-over-modal').style.display = 'none';
+      updateUI();
+      draw();
+    }
+
+    function resetGame() {
+      initBoard();
+    }
+    window.resetGame = resetGame;
+
+    function updateUI() {
+      document.getElementById('score-val').textContent = score;
+      if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem('samegame_best', bestScore.toString());
+      }
+      document.getElementById('best-val').textContent = bestScore;
+
+      const remainCount = countRemainingBlocks();
+      document.getElementById('remain-val').textContent = remainCount;
+    }
+
+    function countRemainingBlocks() {
+      let count = 0;
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (board[r][c] !== 0) count++;
+        }
+      }
+      return count;
+    }
+
+    // 接続している同じ色の同グループを幅優先探索(BFS)で取得
+    function getConnectedGroup(startR, startC) {
+      const colorId = board[startR][startC];
+      if (colorId === 0) return [];
+
+      const group = [];
+      const visited = Array.from({ length: ROWS }, () => new Array(COLS).fill(false));
+      const queue = [{ r: startR, c: startC }];
+      visited[startR][startC] = true;
+
+      while (queue.length > 0) {
+        const curr = queue.shift();
+        group.push(curr);
+
+        const neighbors = [
+          { r: curr.r - 1, c: curr.c },
+          { r: curr.r + 1, c: curr.c },
+          { r: curr.r, c: curr.c - 1 },
+          { r: curr.r, c: curr.c + 1 }
+        ];
+
+        for (const n of neighbors) {
+          if (n.r >= 0 && n.r < ROWS && n.c >= 0 && n.c < COLS) {
+            if (!visited[n.r][n.c] && board[n.r][n.c] === colorId) {
+              visited[n.r][n.c] = true;
+              queue.push(n);
+            }
+          }
+        }
+      }
+
+      return group;
+    }
+
+    // 得点計算式: (N - 2)^2 * 10
+    function calculateGroupScore(count) {
+      if (count < 2) return 0;
+      return Math.pow(count - 2, 2) * 10;
+    }
+
+    function handleBlockClick(r, c) {
+      if (gameOver || board[r][c] === 0) return;
+
+      const clickedGroup = getConnectedGroup(r, c);
+
+      if (clickedGroup.length < 2) {
+        // 単一ブロックは選択解除
+        selectedGroup = [];
+        draw();
+        return;
+      }
+
+      // すでにこのグループが選択されているかチェック
+      const isAlreadySelected = selectedGroup.length === clickedGroup.length &&
+        selectedGroup.every(cell => clickedGroup.some(g => g.r === cell.r && g.c === cell.c));
+
+      if (isAlreadySelected) {
+        // 消去実行
+        saveUndoState();
+        const points = calculateGroupScore(clickedGroup.length);
+        score += points;
+
+        // 消去
+        for (const cell of clickedGroup) {
+          board[cell.r][cell.c] = 0;
+        }
+        selectedGroup = [];
+
+        // 落下と詰め
+        applyGravityAndCompress();
+        updateUI();
+        draw();
+
+        // 終了判定
+        checkGameOver();
+      } else {
+        // 新しいグループを選択状態に
+        selectedGroup = clickedGroup;
+        draw();
+      }
+    }
+
+    function applyGravityAndCompress() {
+      // 1. 各列の落下処理
+      for (let c = 0; c < COLS; c++) {
+        let writeR = ROWS - 1;
+        for (let r = ROWS - 1; r >= 0; r--) {
+          if (board[r][c] !== 0) {
+            board[writeR][c] = board[r][c];
+            if (writeR !== r) {
+              board[r][c] = 0;
+            }
+            writeR--;
+          }
+        }
+      }
+
+      // 2. 空列の左詰め処理
+      let writeC = 0;
+      for (let c = 0; c < COLS; c++) {
+        let hasBlock = false;
+        for (let r = 0; r < ROWS; r++) {
+          if (board[r][c] !== 0) {
+            hasBlock = true;
+            break;
+          }
+        }
+
+        if (hasBlock) {
+          if (writeC !== c) {
+            for (let r = 0; r < ROWS; r++) {
+              board[r][writeC] = board[r][c];
+              board[r][c] = 0;
+            }
+          }
+          writeC++;
+        }
+      }
+    }
+
+    function checkGameOver() {
+      // 2つ以上隣接している同色グループがあるかチェック
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (board[r][c] !== 0) {
+            const grp = getConnectedGroup(r, c);
+            if (grp.length >= 2) {
+              return false; // まだ消せる
+            }
+          }
+        }
+      }
+
+      // ゲーム終了！
+      gameOver = true;
+      const remain = countRemainingBlocks();
+      let bonus = 0;
+      if (remain === 0) bonus = 1000;
+      else if (remain < 5) bonus = 500;
+
+      score += bonus;
+      updateUI();
+
+      const modal = document.getElementById('game-over-modal');
+      document.getElementById('modal-title').textContent = remain === 0 ? '🎉 PERFECT CLEAR!' : 'FINISH!';
+      document.getElementById('modal-msg').innerHTML = `最終スコア: <b>${score}</b> pt<br>` +
+        (bonus > 0 ? `<span style="color:#eab308;">ボーナス: +${bonus}pt！</span><br>` : '') +
+        `残ったブロック: ${remain}個`;
+      modal.style.display = 'flex';
+      return true;
+    }
+
+    function saveUndoState() {
+      const boardCopy = board.map(row => [...row]);
+      undoStack.push({ board: boardCopy, score });
+      if (undoStack.length > 10) undoStack.shift(); // 最大10手まで保存
+    }
+
+    function undo() {
+      if (undoStack.length === 0 || gameOver) return;
+      const lastState = undoStack.pop();
+      board = lastState.board;
+      score = lastState.score;
+      selectedGroup = [];
+      updateUI();
+      draw();
+    }
+
+    // 描画
+    function draw() {
+      ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+      // 背景
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+
+      // ブロック描画
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const typeId = board[r][c];
+          if (typeId === 0) continue;
+
+          const blockDef = BLOCK_COLORS.find(b => b.id === typeId);
+          const x = c * CELL_SIZE;
+          const y = r * CELL_SIZE;
+          const isSelected = selectedGroup.some(cell => cell.r === r && cell.c === c);
+
+          drawBlock(ctx, x, y, blockDef.color, isSelected);
+        }
+      }
+
+      // 選択中グループの予想得点ポップアップ描画
+      if (selectedGroup.length >= 2) {
+        const potentialScore = calculateGroupScore(selectedGroup.length);
+        const centerR = Math.floor(selectedGroup.reduce((sum, p) => sum + p.r, 0) / selectedGroup.length);
+        const centerC = Math.floor(selectedGroup.reduce((sum, p) => sum + p.c, 0) / selectedGroup.length);
+
+        const popX = centerC * CELL_SIZE + CELL_SIZE / 2;
+        const popY = centerR * CELL_SIZE + CELL_SIZE / 2;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(popX - 35, popY - 18, 70, 26, 6);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#facc15';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`+${potentialScore}pt`, popX, popY - 5);
+        ctx.restore();
+      }
+    }
+
+    function drawBlock(ctx, x, y, colorStr, isSelected) {
+      const padding = 2;
+      const w = CELL_SIZE - padding * 2;
+      const h = CELL_SIZE - padding * 2;
+      const bx = x + padding;
+      const by = y + padding;
+
+      ctx.save();
+      ctx.fillStyle = colorStr;
+
+      ctx.beginPath();
+      ctx.roundRect(bx, by, w, h, 6);
+      ctx.fill();
+
+      if (isSelected) {
+        // 選択されたグループのハイライト処理
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#ffffff';
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.fill();
+      } else {
+        // 通常ブロック立体感
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    // タッチ・マウスクリックイベント
+    canvas.addEventListener('pointerdown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
+      const clickX = (e.clientX - rect.left) * scaleX;
+      const clickY = (e.clientY - rect.top) * scaleY;
+
+      const c = Math.floor(clickX / CELL_SIZE);
+      const r = Math.floor(clickY / CELL_SIZE);
+
+      if (c >= 0 && c < COLS && r >= 0 && r < ROWS) {
+        handleBlockClick(r, c);
+      }
+    });
+
+    document.getElementById('btn-undo').addEventListener('click', undo);
+
+    // 初期化
+    resetGame();
+  </script>
+</body>
+</html>

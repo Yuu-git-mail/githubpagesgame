@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, minimum-scale=1.0">
+  <title>コラムス - Columns Game</title>
+  <link rel="stylesheet" href="../../css/common.css">
+  <style>
+    .game-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .status-panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      max-width: 360px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 8px 16px;
+      box-shadow: 0 2px 4px var(--shadow-color);
+    }
+
+    .status-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .status-label {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      font-weight: bold;
+    }
+
+    .status-value {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: var(--text-main);
+    }
+
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+      display: flex;
+      justify-content: center;
+    }
+
+    canvas#columnsCanvas {
+      background-color: #0b0f19;
+      border: 2px solid var(--canvas-border);
+      border-radius: 8px;
+      box-shadow: 0 4px 10px var(--shadow-color);
+      max-width: 100%;
+      height: auto;
+      touch-action: none;
+    }
+
+    .touch-controls {
+      width: 100%;
+      max-width: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .control-row {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .ctrl-btn {
+      flex: 1;
+      height: 52px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text-main);
+      font-size: 1.8rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      box-shadow: 0 2px 4px var(--shadow-color);
+      cursor: pointer;
+    }
+
+    .ctrl-btn:active, .ctrl-btn.active {
+      background: var(--accent-color);
+      color: var(--accent-text);
+      transform: scale(0.96);
+    }
+
+    .ctrl-btn.cycle-btn {
+      background: #8b5cf6;
+      color: #ffffff;
+      border-color: #7c3aed;
+    }
+
+    .ctrl-btn.cycle-btn:active {
+      background: #6d28d9;
+    }
+
+    .ctrl-btn.drop-btn {
+      background: #ef4444;
+      color: #ffffff;
+      border-color: #dc2626;
+    }
+
+    .ctrl-btn.drop-btn:active {
+      background: #b91c1c;
+    }
+
+    .game-over-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.82);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      z-index: 10;
+    }
+
+    .game-over-title {
+      font-size: 2.8rem;
+      font-weight: bold;
+      color: #ef4444;
+      margin-bottom: 8px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+
+    .game-over-score {
+      font-size: 1.6rem;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <!-- 共通ヘッダー -->
+  <header id="game-header" data-title="コラムス" data-back="../../index.html" data-reset></header>
+
+  <main class="container">
+    <div class="game-area">
+      <!-- ステータス表示パネル -->
+      <div class="status-panel">
+        <div class="status-item">
+          <span class="status-label">SCORE</span>
+          <span id="scoreVal" class="status-value">0</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">CHAIN</span>
+          <span id="chainVal" class="status-value">0</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">NEXT</span>
+          <canvas id="nextCanvas" width="40" height="90" style="background:transparent;"></canvas>
+        </div>
+      </div>
+
+      <!-- メインキャンバスエリア -->
+      <div class="canvas-container">
+        <canvas id="columnsCanvas" width="300" height="650"></canvas>
+        <div id="gameOverOverlay" class="game-over-overlay" style="display: none;">
+          <div class="game-over-title">GAME OVER</div>
+          <div id="finalScore" class="game-over-score">Score: 0</div>
+          <button class="btn" onclick="window.resetGame()">もう一度遊ぶ</button>
+        </div>
+      </div>
+
+      <!-- スマホ用タッチ操作ボタン -->
+      <div class="touch-controls">
+        <div class="control-row">
+          <button id="btnLeft" class="ctrl-btn" aria-label="左移動">←</button>
+          <button id="btnCycle" class="ctrl-btn cycle-btn" aria-label="並び替え">🔀 入替</button>
+          <button id="btnRight" class="ctrl-btn" aria-label="右移動">→</button>
+        </div>
+        <div class="control-row">
+          <button id="btnSoftDrop" class="ctrl-btn" aria-label="速落下">↓</button>
+          <button id="btnHardDrop" class="ctrl-btn drop-btn" aria-label="一気落下">⇓ 落下</button>
+        </div>
+      </div>
+
+      <!-- 操作説明 -->
+      <div class="instructions-card">
+        <h2 class="h2-heading" style="margin-top:0;">操作方法</h2>
+        <p class="text-m">
+          ・<strong>← / →</strong>: 左右移動<br>
+          ・<strong>🔀 入替</strong> (または <strong>Z / X / ArrowUp / Space</strong>): 縦3マスの宝石を循環移動<br>
+          ・<strong>↓</strong> (または <strong>ArrowDown</strong>): ソフトドロップ<br>
+          ・<strong>⇓</strong>: ハードドロップ（一気に落下）<br>
+          ・縦・横・斜めに<strong>3つ以上同色</strong>の宝石を揃えて消滅＆連鎖！
+        </p>
+      </div>
+    </div>
+  </main>
+
+  <!-- 共通フッター -->
+  <footer id="game-footer"></footer>
+
+  <script src="../../js/common.js"></script>
+  <script>
+    (function() {
+      // --- 定数 ---
+      const COLS = 6;
+      const ROWS = 13;
+      const CELL_SIZE = 50; // 300 / 6
+
+      // 宝石の色設定 (1: 赤, 2: 青, 3: 緑, 4: 黄, 5: 紫, 6: 水色)
+      const GEM_MAP = {
+        1: { name: 'Ruby', main: '#ef4444', light: '#fca5a5', dark: '#991b1b' },
+        2: { name: 'Sapphire', main: '#3b82f6', light: '#93c5fd', dark: '#1e40af' },
+        3: { name: 'Emerald', main: '#22c55e', light: '#86efac', dark: '#166534' },
+        4: { name: 'Topaz', main: '#eab308', light: '#fef08a', dark: '#854d0e' },
+        5: { name: 'Amethyst', main: '#a855f7', light: '#d8b4fe', dark: '#6b21a8' },
+        6: { name: 'Diamond', main: '#06b6d4', light: '#a5f3fc', dark: '#155e75' }
+      };
+
+      let board = [];
+      let currentColumn = null; // { x, y, gems: [top, mid, bot] } (y はボトムの行)
+      let nextColumn = null;
+      let score = 0;
+      let maxChain = 0;
+      let isGameOver = false;
+      let isProcessing = false;
+      let dropInterval = 800;
+      let lastDropTime = 0;
+      let animationFrameId = null;
+
+      const canvas = document.getElementById('columnsCanvas');
+      const ctx = canvas.getContext('2d');
+      const nextCanvas = document.getElementById('nextCanvas');
+      const nextCtx = nextCanvas.getContext('2d');
+      const scoreVal = document.getElementById('scoreVal');
+      const chainVal = document.getElementById('chainVal');
+      const overlay = document.getElementById('gameOverOverlay');
+      const finalScore = document.getElementById('finalScore');
+
+      // --- 宝石コラム生成 ---
+      function createRandomColumn() {
+        return {
+          gems: [
+            Math.floor(Math.random() * 6) + 1,
+            Math.floor(Math.random() * 6) + 1,
+            Math.floor(Math.random() * 6) + 1
+          ],
+          x: 2,
+          y: 2 // 最下部ボトム宝石の位置が y (topは y-2, midは y-1)
+        };
+      }
+
+      // --- 初期化 / リセット ---
+      window.resetGame = function() {
+        board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+        score = 0;
+        maxChain = 0;
+        isGameOver = false;
+        isProcessing = false;
+        scoreVal.textContent = '0';
+        chainVal.textContent = '0';
+        overlay.style.display = 'none';
+
+        nextColumn = createRandomColumn();
+        spawnColumn();
+
+        lastDropTime = performance.now();
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        requestAnimationFrame(gameLoop);
+      };
+
+      function spawnColumn() {
+        currentColumn = nextColumn;
+        nextColumn = createRandomColumn();
+        drawNextColumn();
+
+        if (!canMove(currentColumn.x, currentColumn.y)) {
+          triggerGameOver();
+        }
+      }
+
+      function triggerGameOver() {
+        isGameOver = true;
+        finalScore.textContent = `Score: ${score}`;
+        overlay.style.display = 'flex';
+      }
+
+      // --- 判定関数 ---
+      function canMove(x, y) {
+        if (x < 0 || x >= COLS || y >= ROWS) return false;
+        // y は最下部(ボトム)の位置。ボトム・ミドル・トップの位置でブロック衝突チェック
+        if (y >= 0 && board[y][x] !== 0) return false;
+        if (y - 1 >= 0 && board[y - 1][x] !== 0) return false;
+        if (y - 2 >= 0 && board[y - 2][x] !== 0) return false;
+        return true;
+      }
+
+      // --- 操作 ---
+      function moveLeft() {
+        if (isGameOver || isProcessing || !currentColumn) return;
+        if (canMove(currentColumn.x - 1, currentColumn.y)) {
+          currentColumn.x--;
+        }
+      }
+
+      function moveRight() {
+        if (isGameOver || isProcessing || !currentColumn) return;
+        if (canMove(currentColumn.x + 1, currentColumn.y)) {
+          currentColumn.x++;
+        }
+      }
+
+      function cycleGems() {
+        if (isGameOver || isProcessing || !currentColumn) return;
+        // [top, mid, bot] -> [bot, top, mid] (下から上に循環)
+        const g = currentColumn.gems;
+        currentColumn.gems = [g[2], g[0], g[1]];
+      }
+
+      function softDrop() {
+        if (isGameOver || isProcessing || !currentColumn) return;
+        if (canMove(currentColumn.x, currentColumn.y + 1)) {
+          currentColumn.y++;
+          score += 1;
+          scoreVal.textContent = score;
+          lastDropTime = performance.now();
+        } else {
+          lockColumn();
+        }
+      }
+
+      function hardDrop() {
+        if (isGameOver || isProcessing || !currentColumn) return;
+        let dropCount = 0;
+        while (canMove(currentColumn.x, currentColumn.y + 1)) {
+          currentColumn.y++;
+          dropCount++;
+        }
+        score += dropCount * 2;
+        scoreVal.textContent = score;
+        lockColumn();
+      }
+
+      // --- ブロック固定＆連鎖処理 ---
+      async function lockColumn() {
+        isProcessing = true;
+        const { x, y, gems } = currentColumn;
+
+        if (y >= 0 && y < ROWS) board[y][x] = gems[2];       // bot
+        if (y - 1 >= 0 && y - 1 < ROWS) board[y - 1][x] = gems[1]; // mid
+        if (y - 2 >= 0 && y - 2 < ROWS) board[y - 2][x] = gems[0]; // top
+
+        currentColumn = null;
+        draw();
+
+        await processMatchesAndGravity();
+
+        if (!isGameOver) {
+          spawnColumn();
+          isProcessing = false;
+          lastDropTime = performance.now();
+        }
+      }
+
+      async function processMatchesAndGravity() {
+        let currentChain = 0;
+
+        while (true) {
+          // 1. 重力適用
+          const dropped = applyGravity();
+          if (dropped) {
+            draw();
+            await sleep(150);
+          }
+
+          // 2. マッチ判定 (縦・横・斜め3連以上)
+          const matches = checkMatches();
+          if (matches.length === 0) {
+            break;
+          }
+
+          currentChain++;
+          if (currentChain > maxChain) maxChain = currentChain;
+          chainVal.textContent = currentChain;
+
+          // スコア計算 (連鎖ボーナス倍率)
+          const bonus = Math.pow(2, currentChain - 1);
+          score += matches.length * 50 * bonus;
+          scoreVal.textContent = score;
+
+          // 点滅消去アニメーション
+          await animateErase(matches);
+
+          // セル消去
+          for (const m of matches) {
+            board[m.r][m.c] = 0;
+          }
+
+          draw();
+          await sleep(150);
+        }
+      }
+
+      function applyGravity() {
+        let moved = false;
+        for (let c = 0; c < COLS; c++) {
+          for (let r = ROWS - 2; r >= 0; r--) {
+            if (board[r][c] !== 0 && board[r + 1][c] === 0) {
+              let targetR = r;
+              while (targetR + 1 < ROWS && board[targetR + 1][c] === 0) {
+                targetR++;
+              }
+              board[targetR][c] = board[r][c];
+              board[r][c] = 0;
+              moved = true;
+            }
+          }
+        }
+        return moved;
+      }
+
+      // 縦・横・斜め（左上->右下、右上->左下）の3連以上マッチ
+      function checkMatches() {
+        const matchedSet = new Set();
+
+        const checkLine = (line) => {
+          if (line.length < 3) return;
+          let count = 1;
+          for (let i = 0; i < line.length; i++) {
+            const curr = line[i];
+            const next = line[i + 1];
+            if (next && board[curr.r][curr.c] !== 0 && board[curr.r][curr.c] === board[next.r][next.c]) {
+              count++;
+            } else {
+              if (count >= 3) {
+                for (let k = i - count + 1; k <= i; k++) {
+                  matchedSet.add(`${line[k].r},${line[k].c}`);
+                }
+              }
+              count = 1;
+            }
+          }
+        };
+
+        // 1. 横
+        for (let r = 0; r < ROWS; r++) {
+          const line = [];
+          for (let c = 0; c < COLS; c++) line.push({ r, c });
+          checkLine(line);
+        }
+
+        // 2. 縦
+        for (let c = 0; c < COLS; c++) {
+          const line = [];
+          for (let r = 0; r < ROWS; r++) line.push({ r, c });
+          checkLine(line);
+        }
+
+        // 3. 斜め (左上 -> 右下)
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const line = [];
+            let currR = r;
+            let currC = c;
+            while (currR < ROWS && currC < COLS) {
+              line.push({ r: currR, c: currC });
+              currR++;
+              currC++;
+            }
+            checkLine(line);
+          }
+        }
+
+        // 4. 斜め (右上 -> 左下)
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const line = [];
+            let currR = r;
+            let currC = c;
+            while (currR < ROWS && currC >= 0) {
+              line.push({ r: currR, c: currC });
+              currR++;
+              currC--;
+            }
+            checkLine(line);
+          }
+        }
+
+        return Array.from(matchedSet).map(str => {
+          const [r, c] = str.split(',').map(Number);
+          return { r, c };
+        });
+      }
+
+      async function animateErase(cells) {
+        for (let i = 0; i < 3; i++) {
+          draw(cells, i % 2 === 0);
+          await sleep(80);
+        }
+      }
+
+      function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      // --- 描画関数 ---
+      function drawGem(context, x, y, gemId, size = CELL_SIZE, isHighlight = false) {
+        const gem = GEM_MAP[gemId];
+        if (!gem) return;
+
+        context.save();
+        if (isHighlight) {
+          context.fillStyle = '#ffffff';
+          context.fillRect(x + 2, y + 2, size - 4, size - 4);
+        } else {
+          // 高級感のあるダイヤモンド風ファセット描画
+          const pad = 3;
+          const left = x + pad;
+          const top = y + pad;
+          const width = size - pad * 2;
+          const height = size - pad * 2;
+          const cx = left + width / 2;
+          const cy = top + height / 2;
+
+          // ベースグラデーション
+          const grad = context.createLinearGradient(left, top, left + width, top + height);
+          grad.addColorStop(0, gem.light);
+          grad.addColorStop(0.5, gem.main);
+          grad.addColorStop(1, gem.dark);
+
+          context.fillStyle = grad;
+          context.fillRect(left, top, width, height);
+
+          // ファセット（面）の枠線描画
+          context.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+          context.lineWidth = 1.5;
+          context.strokeRect(left, top, width, height);
+
+          // 斜め線
+          context.beginPath();
+          context.moveTo(left, top);
+          context.lineTo(cx, cy);
+          context.moveTo(left + width, top);
+          context.lineTo(cx, cy);
+          context.moveTo(left, top + height);
+          context.lineTo(cx, cy);
+          context.moveTo(left + width, top + height);
+          context.lineTo(cx, cy);
+          context.stroke();
+
+          // 中央輝きハイライト
+          context.fillStyle = 'rgba(255, 255, 255, 0.3)';
+          context.beginPath();
+          context.moveTo(cx, top + 4);
+          context.lineTo(left + width - 4, cy);
+          context.lineTo(cx, cy);
+          context.fill();
+        }
+        context.restore();
+      }
+
+      function draw(eraseCells = [], hideErase = false) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0b0f19';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // グリッド
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1;
+        for (let r = 0; r <= ROWS; r++) {
+          ctx.beginPath();
+          ctx.moveTo(0, r * CELL_SIZE);
+          ctx.lineTo(canvas.width, r * CELL_SIZE);
+          ctx.stroke();
+        }
+        for (let c = 0; c <= COLS; c++) {
+          ctx.beginPath();
+          ctx.moveTo(c * CELL_SIZE, 0);
+          ctx.lineTo(c * CELL_SIZE, canvas.height);
+          ctx.stroke();
+        }
+
+        // フィールド
+        const eraseMap = new Set(eraseCells.map(cell => `${cell.r},${cell.c}`));
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            const gemId = board[r][c];
+            if (gemId !== 0) {
+              const isErase = eraseMap.has(`${r},${c}`);
+              if (isErase && hideErase) continue;
+              drawGem(ctx, c * CELL_SIZE, r * CELL_SIZE, gemId, CELL_SIZE, isErase);
+            }
+          }
+        }
+
+        // 落下中コラム
+        if (currentColumn && !isProcessing) {
+          const { x, y, gems } = currentColumn;
+          const positions = [
+            { r: y - 2, gem: gems[0] }, // top
+            { r: y - 1, gem: gems[1] }, // mid
+            { r: y,     gem: gems[2] }  // bot
+          ];
+
+          for (const pos of positions) {
+            if (pos.r >= 0) {
+              drawGem(ctx, x * CELL_SIZE, pos.r * CELL_SIZE, pos.gem, CELL_SIZE);
+            }
+          }
+        }
+      }
+
+      function drawNextColumn() {
+        nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+        if (!nextColumn) return;
+        drawGem(nextCtx, 5, 5, nextColumn.gems[0], 28);
+        drawGem(nextCtx, 5, 33, nextColumn.gems[1], 28);
+        drawGem(nextCtx, 5, 61, nextColumn.gems[2], 28);
+      }
+
+      // --- メインループ ---
+      function gameLoop(timestamp) {
+        if (isGameOver) return;
+
+        if (!isProcessing && currentColumn) {
+          if (timestamp - lastDropTime > dropInterval) {
+            softDrop();
+            lastDropTime = timestamp;
+          }
+        }
+
+        draw();
+        animationFrameId = requestAnimationFrame(gameLoop);
+      }
+
+      // --- キーボード＆タッチ設定 ---
+      document.addEventListener('keydown', (e) => {
+        if (isGameOver || isProcessing) return;
+        switch (e.key) {
+          case 'ArrowLeft':
+            moveLeft();
+            break;
+          case 'ArrowRight':
+            moveRight();
+            break;
+          case 'ArrowDown':
+            softDrop();
+            break;
+          case 'ArrowUp':
+          case 'Space':
+          case 'z':
+          case 'Z':
+          case 'x':
+          case 'X':
+            cycleGems();
+            break;
+        }
+      });
+
+      function setupButton(btnId, actionFn, repeat = false) {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+
+        let intervalId = null;
+
+        const start = (e) => {
+          e.preventDefault();
+          btn.classList.add('active');
+          actionFn();
+          if (repeat) {
+            intervalId = setInterval(actionFn, 120);
+          }
+        };
+
+        const stop = (e) => {
+          if (e) e.preventDefault();
+          btn.classList.remove('active');
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+        };
+
+        btn.addEventListener('touchstart', start, { passive: false });
+        btn.addEventListener('touchend', stop, { passive: false });
+        btn.addEventListener('touchcancel', stop, { passive: false });
+
+        btn.addEventListener('mousedown', start);
+        btn.addEventListener('mouseup', stop);
+        btn.addEventListener('mouseleave', stop);
+      }
+
+      setupButton('btnLeft', moveLeft, true);
+      setupButton('btnRight', moveRight, true);
+      setupButton('btnSoftDrop', softDrop, true);
+      setupButton('btnHardDrop', hardDrop, false);
+      setupButton('btnCycle', cycleGems, false);
+
+      window.resetGame();
+    })();
+  </script>
+</body>
+</html>

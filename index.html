@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, minimum-scale=1.0">
+  <title>Game Hub - レトロ・パズルゲーム集</title>
+  <link rel="stylesheet" href="css/common.css">
+  <style>
+    .portal-header {
+      text-align: center;
+      padding: 2.0rem 0 1.0rem 0;
+    }
+    .category-section {
+      margin-bottom: 3.0rem;
+    }
+    .game-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 1.2rem;
+      margin-top: 1.0rem;
+    }
+    .game-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.8rem;
+      padding: 1.5rem 1.0rem;
+      text-align: center;
+      text-decoration: none;
+      color: var(--text-main);
+      box-shadow: 0 2px 4px var(--shadow-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+      min-height: 110px;
+    }
+    .game-card:active {
+      transform: scale(0.96);
+      border-color: var(--accent-color);
+    }
+    .game-icon {
+      font-size: 2.8rem;
+      margin-bottom: 0.5rem;
+    }
+    .game-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1.3;
+    }
+    .game-desc {
+      font-size: 1.0rem;
+      color: var(--text-muted);
+      margin-top: 0.4rem;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header class="portal-header">
+      <h1 class="h1-title">🎮 Game Hub Portal</h1>
+      <p class="description-s">スマホ・タブレット・PC対応！ブラウザで遊べる静的レトロ・パズルゲーム集</p>
+    </header>
+
+    <main>
+      <!-- カテゴリー1: 落ち物・マッチ系パズル -->
+      <section class="category-section">
+        <h2 class="h2-heading">🧩 落ち物・マッチ系パズル</h2>
+        <div class="game-grid">
+          <a href="games/bottlegame/index.html" class="game-card">
+            <div class="game-icon">🧪</div>
+            <div class="game-name">ボトルソート</div>
+            <div class="game-desc">色水を瓶に分けるソートパズル</div>
+          </a>
+          <a href="games/puyo/index.html" class="game-card">
+            <div class="game-icon">🔴</div>
+            <div class="game-name">ぷよぷよ</div>
+            <div class="game-desc">同色4連結消し連鎖パズル</div>
+          </a>
+          <a href="games/drmario/index.html" class="game-card">
+            <div class="game-icon">💊</div>
+            <div class="game-name">Dr.マリオ</div>
+            <div class="game-desc">カプセルでウイルス退治</div>
+          </a>
+          <a href="games/columns/index.html" class="game-card">
+            <div class="game-icon">💎</div>
+            <div class="game-name">コラムス</div>
+            <div class="game-desc">縦3連宝石並べ替えパズル</div>
+          </a>
+          <a href="games/panepon/index.html" class="game-card">
+            <div class="game-icon">🔄</div>
+            <div class="game-name">パネルでポン</div>
+            <div class="game-desc">左右入れ替えアクション</div>
+          </a>
+          <a href="games/game2048/index.html" class="game-card">
+            <div class="game-icon">🔢</div>
+            <div class="game-name">2048</div>
+            <div class="game-desc">スライド数字合体パズル</div>
+          </a>
+          <a href="games/samegame/index.html" class="game-card">
+            <div class="game-icon">🟦</div>
+            <div class="game-name">さめがめ</div>
+            <div class="game-desc">隣接ブロック一括消し</div>
+          </a>
+        </div>
+      </section>
+
+      <!-- カテゴリー2: グリッド・論理パズル -->
+      <section class="category-section">
+        <h2 class="h2-heading">📦 グリッド・論理パズル</h2>
+        <div class="game-grid">
+          <a href="games/soukoban/index.html" class="game-card">
+            <div class="game-icon">📦</div>
+            <div class="game-name">倉庫番</div>
+            <div class="game-desc">荷物を目的地へ運ぶ</div>
+          </a>
+          <a href="games/minesweeper/index.html" class="game-card">
+            <div class="game-icon">💣</div>
+            <div class="game-name">マインスイーパ</div>
+            <div class="game-desc">数字ヒントで地雷回避</div>
+          </a>
+          <a href="games/picross/index.html" class="game-card">
+            <div class="game-icon">✏️</div>
+            <div class="game-name">ピクロス</div>
+            <div class="game-desc">数字からお絵かきロジック</div>
+          </a>
+        </div>
+      </section>
+
+      <!-- カテゴリー3: シンプル・レトロアーケード -->
+      <section class="category-section">
+        <h2 class="h2-heading">🕹️ レトロアーケード</h2>
+        <div class="game-grid">
+          <a href="games/snake/index.html" class="game-card">
+            <div class="game-icon">🐍</div>
+            <div class="game-name">スネーク</div>
+            <div class="game-desc">エサを食べて伸びるヘビ</div>
+          </a>
+          <a href="games/breakout/index.html" class="game-card">
+            <div class="game-icon">🧱</div>
+            <div class="game-name">ブロック崩し</div>
+            <div class="game-desc">パドルでボール打ち返し</div>
+          </a>
+          <a href="games/pacman/index.html" class="game-card">
+            <div class="game-icon">🟡</div>
+            <div class="game-name">ドットイート</div>
+            <div class="game-desc">敵から逃げてドット回収</div>
+          </a>
+          <a href="games/frogger/index.html" class="game-card">
+            <div class="game-icon">🐸</div>
+            <div class="game-name">フロッガー</div>
+            <div class="game-desc">道路と川を渡り対岸へ</div>
+          </a>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer id="game-footer"></footer>
+  <script src="js/common.js"></script>
+</body>
+</html>

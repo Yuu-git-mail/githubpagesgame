@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, minimum-scale=1.0">
+  <title>パネルでポン - Game Hub</title>
+  <link rel="stylesheet" href="../../css/common.css">
+  <style>
+    .score-board {
+      display: flex;
+      justify-content: space-around;
+      width: 100%;
+      max-width: 360px;
+      margin-bottom: 1.0rem;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.8rem;
+      padding: 0.8rem 1.2rem;
+      box-shadow: 0 2px 4px var(--shadow-color);
+    }
+    .score-item {
+      text-align: center;
+    }
+    .score-label {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .score-value {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: var(--accent-color);
+    }
+    .game-action-row {
+      width: 100%;
+      max-width: 360px;
+      margin-top: 0.8rem;
+    }
+    .btn-push {
+      width: 100%;
+      padding: 1.0rem;
+      font-size: 1.6rem;
+      font-weight: bold;
+      background: var(--accent-color);
+      color: #ffffff;
+      border: none;
+      border-radius: 0.8rem;
+      cursor: pointer;
+      box-shadow: 0 2px 4px var(--shadow-color);
+      transition: transform 0.1s ease, background-color 0.2s ease;
+    }
+    .btn-push:active {
+      transform: scale(0.97);
+      background-color: var(--accent-hover);
+    }
+    .game-over-modal {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      border-radius: 0.8rem;
+      z-index: 10;
+    }
+    .game-over-modal h2 {
+      color: #ff4d4d;
+      font-size: 2.8rem;
+      margin-bottom: 0.5rem;
+    }
+    .game-over-modal p {
+      font-size: 1.6rem;
+      margin-bottom: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header id="game-header" data-title="パネルでポン" data-back="../../index.html" data-reset></header>
+
+  <div class="container">
+    <div class="game-container">
+      <div class="score-board">
+        <div class="score-item">
+          <div class="score-label">SCORE</div>
+          <div class="score-value" id="score-val">0</div>
+        </div>
+        <div class="score-item">
+          <div class="score-label">CHAIN</div>
+          <div class="score-value" id="chain-val">1 MAX</div>
+        </div>
+        <div class="score-item">
+          <div class="score-label">LEVEL</div>
+          <div class="score-value" id="level-val">1</div>
+        </div>
+      </div>
+
+      <div class="game-canvas-wrapper">
+        <canvas id="game-canvas" width="360" height="540" class="game-canvas"></canvas>
+        <div id="game-over-screen" class="game-over-modal" style="display: none;">
+          <h2>GAME OVER</h2>
+          <p>Final Score: <span id="final-score">0</span></p>
+          <button class="btn" onclick="window.resetGame()">もう一度プレイ</button>
+        </div>
+      </div>
+
+      <!-- 操作ボタンパネル -->
+      <div class="controls-panel">
+        <div></div>
+        <button class="control-btn" id="btn-up" aria-label="上">▲</button>
+        <div></div>
+        <button class="control-btn" id="btn-left" aria-label="左">◄</button>
+        <button class="control-btn" id="btn-swap" style="background: var(--accent-color); color: #fff;" aria-label="入れ替え">🔄</button>
+        <button class="control-btn" id="btn-right" aria-label="右">►</button>
+        <div></div>
+        <button class="control-btn" id="btn-down" aria-label="下">▼</button>
+        <div></div>
+      </div>
+
+      <div class="game-action-row">
+        <button class="btn-push" id="btn-push">⚡ せり上げ (PUSH UP)</button>
+      </div>
+
+      <div class="instructions-card">
+        <h2 class="h2-heading">💡 遊び方</h2>
+        <p class="text-s">
+          ・<b>カーソル移動</b>: パネルタップ / 画面ボタン / 方向キー(↑↓←→)<br>
+          ・<b>パネル入れ替え</b>: 🔄ボタン / Spaceキー / 選択パネル再タップ<br>
+          ・<b>消去規則</b>: 縦または横に同じ色のパネルを3つ以上並べると消滅！<br>
+          ・<b>連鎖 (Chain)</b>: 上から落ちてきたパネルが再び揃うと連続コンボが発生！高得点を狙おう！<br>
+          ・<b>せり上げ</b>: パネルは徐々に下から競り上がります。「せり上げ」で意図的に上昇を加速可能！天井に届くとゲームオーバー。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <footer id="game-footer"></footer>
+  <script src="../../js/common.js"></script>
+  <script>
+    // ==========================================
+    // パネルでポン (Panel de Pon) ゲームエンジン
+    // ==========================================
+    const COLS = 6;
+    const VISIBLE_ROWS = 9;
+    const CELL_SIZE = 60; // 60px * 6 cols = 360px width, 60px * 9 rows = 540px height
+    const TOTAL_ROWS = 12;
+
+    const PANEL_TYPES = [
+      { id: 1, color: '#ef4444', icon: '♥' },  // 赤
+      { id: 2, color: '#22c55e', icon: '▲' },  // 緑
+      { id: 3, color: '#3b82f6', icon: '◆' },  // 青
+      { id: 4, color: '#eab308', icon: '★' },  // 黄
+      { id: 5, color: '#a855f7', icon: '●' }   // 紫
+    ];
+
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+
+    // ゲーム状態変数
+    let grid = []; // TOTAL_ROWS x COLS, 0 is top invisible zone
+    let riseOffset = 0; // 0 to CELL_SIZE
+    let riseSpeed = 0.15; // pixels per frame
+    let cursor = { r: 5, c: 2 }; // 0-indexed visible row (0..8), col (0..4)
+    let score = 0;
+    let currentChain = 1;
+    let maxChain = 1;
+    let level = 1;
+    let gameOver = false;
+    let isSwapping = false;
+    let swapAnim = null; // { r, c, progress }
+    let clearingAnim = []; // array of { r, c, timer }
+    let animReqId = null;
+
+    function getRandomType(excludeTypes = []) {
+      const available = PANEL_TYPES.filter(pt => !excludeTypes.includes(pt.id));
+      return available[Math.floor(Math.random() * available.length)].id;
+    }
+
+    function createEmptyBoard() {
+      const b = [];
+      for (let r = 0; r < TOTAL_ROWS; r++) {
+        b[r] = new Array(COLS).fill(0);
+      }
+      return b;
+    }
+
+    function initBoard() {
+      grid = createEmptyBoard();
+      // Fill bottom 4 visible rows + bottom hidden row without initial 3-matches
+      const startRow = TOTAL_ROWS - 5;
+      for (let r = startRow; r < TOTAL_ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          let forbidden = [];
+          if (c >= 2 && grid[r][c-1] === grid[r][c-2] && grid[r][c-1] !== 0) {
+            forbidden.push(grid[r][c-1]);
+          }
+          if (r - startRow >= 2 && grid[r-1][c] === grid[r-2][c] && grid[r-1][c] !== 0) {
+            forbidden.push(grid[r-1][c]);
+          }
+          grid[r][c] = getRandomType(forbidden);
+        }
+      }
+    }
+
+    function resetGame() {
+      score = 0;
+      currentChain = 1;
+      maxChain = 1;
+      level = 1;
+      riseOffset = 0;
+      riseSpeed = 0.15;
+      gameOver = false;
+      cursor = { r: 5, c: 2 };
+      clearingAnim = [];
+      swapAnim = null;
+      isSwapping = false;
+
+      document.getElementById('game-over-screen').style.display = 'none';
+      updateUI();
+      initBoard();
+
+      if (animReqId) cancelAnimationFrame(animReqId);
+      lastTime = performance.now();
+      animReqId = requestAnimationFrame(gameLoop);
+    }
+    window.resetGame = resetGame;
+
+    function updateUI() {
+      document.getElementById('score-val').textContent = score;
+      document.getElementById('chain-val').textContent = `${maxChain} MAX`;
+      document.getElementById('level-val').textContent = level;
+    }
+
+    // ゲームメインループ
+    let lastTime = 0;
+    function gameLoop(timestamp) {
+      if (gameOver) return;
+
+      const dt = timestamp - lastTime;
+      lastTime = timestamp;
+
+      update(dt);
+      draw();
+
+      animReqId = requestAnimationFrame(gameLoop);
+    }
+
+    function update(dt) {
+      if (gameOver) return;
+
+      // 1. せり上げ進行
+      riseOffset += riseSpeed;
+      if (riseOffset >= CELL_SIZE) {
+        riseOffset -= CELL_SIZE;
+        // 全行を1つ上にシフト
+        // 最上段にブロックがあればゲームオーバー
+        if (grid[0].some(val => val !== 0)) {
+          endGame();
+          return;
+        }
+
+        for (let r = 0; r < TOTAL_ROWS - 1; r++) {
+          grid[r] = [...grid[r+1]];
+        }
+        // 最下段に新しい行を生成
+        const newRow = [];
+        for (let c = 0; c < COLS; c++) {
+          let forbidden = [];
+          if (c >= 2 && newRow[c-1] === newRow[c-2]) forbidden.push(newRow[c-1]);
+          if (grid[TOTAL_ROWS - 2][c] !== 0) forbidden.push(grid[TOTAL_ROWS - 2][c]);
+          newRow[c] = getRandomType(forbidden);
+        }
+        grid[TOTAL_ROWS - 1] = newRow;
+
+        // レベル上昇
+        level = Math.floor(score / 1000) + 1;
+        riseSpeed = 0.15 + (level - 1) * 0.05;
+      }
+
+      // 2. クリアアニメーション更新
+      if (clearingAnim.length > 0) {
+        for (let i = clearingAnim.length - 1; i >= 0; i--) {
+          clearingAnim[i].timer -= dt;
+          if (clearingAnim[i].timer <= 0) {
+            const { r, c } = clearingAnim[i];
+            grid[r][c] = 0; // 消滅
+            clearingAnim.splice(i, 1);
+          }
+        }
+        if (clearingAnim.length === 0) {
+          // クリア完了後、重力適用と連鎖チェック
+          applyGravityAndCheckMatches(true);
+        }
+        return;
+      }
+
+      // 3. スワップアニメーション更新
+      if (swapAnim) {
+        swapAnim.progress += dt / 100; // 100ms swap duration
+        if (swapAnim.progress >= 1) {
+          const { r, c } = swapAnim;
+          const temp = grid[r][c];
+          grid[r][c] = grid[r][c+1];
+          grid[r][c+1] = temp;
+          swapAnim = null;
+          isSwapping = false;
+
+          // マッチチェック
+          const matched = checkMatches();
+          if (!matched) {
+            currentChain = 1;
+            applyGravityAndCheckMatches(false);
+          }
+        }
+        return;
+      }
+
+      // 4. 常時重力とマッチチェック
+      applyGravityAndCheckMatches(false);
+    }
+
+    function applyGravityAndCheckMatches(isChainPossibility) {
+      let fell = false;
+      // 重力処理 (下から上へスキャン)
+      for (let r = TOTAL_ROWS - 2; r >= 0; r--) {
+        for (let c = 0; c < COLS; c++) {
+          if (grid[r][c] !== 0 && grid[r+1][c] === 0 && !isClearing(r, c)) {
+            grid[r+1][c] = grid[r][c];
+            grid[r][c] = 0;
+            fell = true;
+          }
+        }
+      }
+
+      if (!fell && clearingAnim.length === 0 && !swapAnim) {
+        // マッチ判定
+        const matched = checkMatches(isChainPossibility);
+        if (!matched && !fell) {
+          // コンボ終了
+        }
+      }
+    }
+
+    function isClearing(r, c) {
+      return clearingAnim.some(anim => anim.r === r && anim.c === c);
+    }
+
+    function checkMatches(isChain = false) {
+      const matchGrid = Array.from({ length: TOTAL_ROWS }, () => new Array(COLS).fill(false));
+      let matchCount = 0;
+
+      // 横方向チェック
+      for (let r = 0; r < TOTAL_ROWS; r++) {
+        let matchLen = 1;
+        for (let c = 0; c < COLS; c++) {
+          if (c < COLS - 1 && grid[r][c] !== 0 && grid[r][c] === grid[r][c+1] && !isClearing(r, c) && !isClearing(r, c+1)) {
+            matchLen++;
+          } else {
+            if (matchLen >= 3) {
+              for (let k = c - matchLen + 1; k <= c; k++) {
+                matchGrid[r][k] = true;
+              }
+            }
+            matchLen = 1;
+          }
+        }
+      }
+
+      // 縦方向チェック
+      for (let c = 0; c < COLS; c++) {
+        let matchLen = 1;
+        for (let r = 0; r < TOTAL_ROWS; r++) {
+          if (r < TOTAL_ROWS - 1 && grid[r][c] !== 0 && grid[r][c] === grid[r+1][c] && !isClearing(r, c) && !isClearing(r+1, c)) {
+            matchLen++;
+          } else {
+            if (matchLen >= 3) {
+              for (let k = r - matchLen + 1; k <= r; k++) {
+                matchGrid[k][c] = true;
+              }
+            }
+            matchLen = 1;
+          }
+        }
+      }
+
+      // マッチ収集
+      const newClears = [];
+      for (let r = 0; r < TOTAL_ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (matchGrid[r][c]) {
+            newClears.push({ r, c, timer: 350 }); // 350ms flash
+            matchCount++;
+          }
+        }
+      }
+
+      if (matchCount > 0) {
+        if (isChain) {
+          currentChain++;
+          if (currentChain > maxChain) maxChain = currentChain;
+        } else {
+          currentChain = 1;
+        }
+        score += matchCount * 100 * currentChain;
+        updateUI();
+        clearingAnim.push(...newClears);
+        return true;
+      }
+      return false;
+    }
+
+    // 描画関数
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 表示行範囲: TOTAL_ROWS - VISIBLE_ROWS - 1 (1行下から湧き出る) から TOTAL_ROWS - 1
+      const startR = TOTAL_ROWS - VISIBLE_ROWS - 1;
+
+      for (let r = startR; r < TOTAL_ROWS; r++) {
+        const drawY = (r - startR) * CELL_SIZE - riseOffset;
+
+        for (let c = 0; c < COLS; c++) {
+          let panelId = grid[r][c];
+          let drawX = c * CELL_SIZE;
+
+          // スワップ中のオフセット計算
+          if (swapAnim && swapAnim.r === r) {
+            if (swapAnim.c === c) {
+              drawX += swapAnim.progress * CELL_SIZE;
+            } else if (swapAnim.c + 1 === c) {
+              drawX -= swapAnim.progress * CELL_SIZE;
+            }
+          }
+
+          if (panelId !== 0) {
+            drawPanel(ctx, drawX, drawY, panelId, isClearing(r, c));
+          }
+        }
+      }
+
+      // カーソル描画
+      const cursorY = cursor.r * CELL_SIZE;
+      const cursorX = cursor.c * CELL_SIZE;
+      drawCursor(ctx, cursorX, cursorY);
+    }
+
+    function drawPanel(ctx, x, y, typeId, flashing) {
+      const panel = PANEL_TYPES.find(p => p.id === typeId);
+      if (!panel) return;
+
+      const padding = 3;
+      const w = CELL_SIZE - padding * 2;
+      const h = CELL_SIZE - padding * 2;
+      const px = x + padding;
+      const py = y + padding;
+
+      ctx.save();
+
+      if (flashing) {
+        const time = Date.now();
+        ctx.fillStyle = Math.floor(time / 80) % 2 === 0 ? '#ffffff' : panel.color;
+      } else {
+        ctx.fillStyle = panel.color;
+      }
+
+      // パネル枠・立体角丸
+      ctx.beginPath();
+      ctx.roundRect(px, py, w, h, 8);
+      ctx.fill();
+
+      // 内側ハイライト
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.stroke();
+
+      // アイコン文字
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(panel.icon, px + w / 2, py + h / 2 + 1);
+
+      ctx.restore();
+    }
+
+    function drawCursor(ctx, x, y) {
+      ctx.save();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 4;
+
+      const w = CELL_SIZE * 2;
+      const h = CELL_SIZE;
+
+      ctx.strokeRect(x + 2, y + 2, w - 4, h - 4);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#2563eb';
+      ctx.strokeRect(x, y, w, h);
+
+      ctx.restore();
+    }
+
+    function triggerSwap() {
+      if (gameOver || isSwapping || clearingAnim.length > 0) return;
+
+      // カーソル位置を実盤面インデックスに変換
+      const realR = (TOTAL_ROWS - VISIBLE_ROWS - 1) + cursor.r + Math.floor(riseOffset / CELL_SIZE);
+      const realC = cursor.c;
+
+      if (realR < 0 || realR >= TOTAL_ROWS) return;
+
+      isSwapping = true;
+      swapAnim = { r: realR, c: realC, progress: 0 };
+    }
+
+    function pushUp() {
+      if (gameOver) return;
+      riseOffset += 20; // せり上げ加速
+    }
+
+    function endGame() {
+      gameOver = true;
+      document.getElementById('final-score').textContent = score;
+      document.getElementById('game-over-screen').style.display = 'flex';
+    }
+
+    // イベントリスナー設定
+    document.getElementById('btn-up').addEventListener('click', () => { if (cursor.r > 0) cursor.r--; });
+    document.getElementById('btn-down').addEventListener('click', () => { if (cursor.r < VISIBLE_ROWS - 1) cursor.r++; });
+    document.getElementById('btn-left').addEventListener('click', () => { if (cursor.c > 0) cursor.c--; });
+    document.getElementById('btn-right').addEventListener('click', () => { if (cursor.c < COLS - 2) cursor.c++; });
+    document.getElementById('btn-swap').addEventListener('click', triggerSwap);
+    document.getElementById('btn-push').addEventListener('click', pushUp);
+
+    // キーボード操作
+    window.addEventListener('keydown', (e) => {
+      if (gameOver) return;
+      switch (e.key) {
+        case 'ArrowUp': case 'w': case 'W':
+          if (cursor.r > 0) cursor.r--;
+          break;
+        case 'ArrowDown': case 's': case 'S':
+          if (cursor.r < VISIBLE_ROWS - 1) cursor.r++;
+          break;
+        case 'ArrowLeft': case 'a': case 'A':
+          if (cursor.c > 0) cursor.c--;
+          break;
+        case 'ArrowRight': case 'd': case 'D':
+          if (cursor.c < COLS - 2) cursor.c--;
+          break;
+        case ' ': case 'Enter':
+          triggerSwap();
+          break;
+        case 'Shift':
+          pushUp();
+          break;
+      }
+    });
+
+    // タッチ・タップ直感操作
+    canvas.addEventListener('pointerdown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+
+      const clickX = (e.clientX - rect.left) * scaleX;
+      const clickY = (e.clientY - rect.top) * scaleY;
+
+      const c = Math.floor(clickX / CELL_SIZE);
+      const r = Math.floor(clickY / CELL_SIZE);
+
+      if (c >= 0 && c < COLS && r >= 0 && r < VISIBLE_ROWS) {
+        const targetC = Math.min(c, COLS - 2);
+        if (cursor.r === r && cursor.c === targetC) {
+          // すでにカーソルがある位置をタップでスワップ発動
+          triggerSwap();
+        } else {
+          // カーソル移動
+          cursor.r = r;
+          cursor.c = targetC;
+        }
+      }
+    });
+
+    // 初期起動
+    resetGame();
+  </script>
+</body>
+</html>

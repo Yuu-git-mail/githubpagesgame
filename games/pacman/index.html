@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, minimum-scale=1.0">
+  <title>ドットイート - Game Hub</title>
+  <link rel="stylesheet" href="../../css/common.css">
+  <style>
+    .status-board {
+      display: flex;
+      justify-content: space-around;
+      width: 100%;
+      max-width: 400px;
+      margin-bottom: 1.0rem;
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.8rem;
+      padding: 0.8rem 1.2rem;
+      box-shadow: 0 2px 4px var(--shadow-color);
+    }
+    .status-item {
+      text-align: center;
+    }
+    .status-label {
+      font-size: 1.2rem;
+      color: var(--text-muted);
+    }
+    .status-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--accent-color);
+    }
+    .dpad-container {
+      width: 100%;
+      max-width: 260px;
+      margin: 1.5rem auto 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 0.8rem;
+    }
+    .dpad-btn {
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      font-size: 2.2rem;
+      border-radius: 0.8rem;
+      height: 5.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+      box-shadow: 0 2px 4px var(--shadow-color);
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .dpad-btn:active {
+      background-color: var(--accent-color);
+      color: var(--accent-text);
+      transform: scale(0.95);
+    }
+    .dpad-up { grid-column: 2; grid-row: 1; }
+    .dpad-left { grid-column: 1; grid-row: 2; }
+    .dpad-right { grid-column: 3; grid-row: 2; }
+    .dpad-down { grid-column: 2; grid-row: 3; }
+  </style>
+</head>
+<body>
+
+  <header id="game-header" data-title="ドットイート" data-back="../../index.html" data-reset></header>
+
+  <div class="container">
+    <div class="game-container">
+      
+      <!-- ステータスボード -->
+      <div class="status-board">
+        <div class="status-item">
+          <div class="status-label">SCORE</div>
+          <div id="score" class="status-value">0</div>
+        </div>
+        <div class="status-item">
+          <div class="status-label">REMAINING</div>
+          <div id="dots-left" class="status-value">0</div>
+        </div>
+        <div class="status-item">
+          <div class="status-label">HIGH SCORE</div>
+          <div id="high-score" class="status-value">0</div>
+        </div>
+      </div>
+
+      <!-- ゲームキャンバス -->
+      <div class="game-canvas-wrapper">
+        <canvas id="game-canvas" class="game-canvas" width="405" height="405"></canvas>
+      </div>
+
+      <!-- タッチ操作パネル -->
+      <div class="dpad-container">
+        <button id="btn-up" class="dpad-btn dpad-up" aria-label="上">▲</button>
+        <button id="btn-left" class="dpad-btn dpad-left" aria-label="左">◀</button>
+        <button id="btn-right" class="dpad-btn dpad-right" aria-label="右">▶</button>
+        <button id="btn-down" class="dpad-btn dpad-down" aria-label="下">▼</button>
+      </div>
+
+      <!-- 操作説明カード -->
+      <div class="instructions-card">
+        <h2 class="h2-heading" style="margin-top:0;">🎮 操作方法</h2>
+        <p class="text-m">
+          ・キーボード：<strong>矢印キー (▲/▼/◀/▶)</strong> または <strong>WASD</strong><br>
+          ・スマホ/タブレット：画面下の<strong>十字ボタン</strong>をタップ<br>
+          ・黄色いパックマンを操作し、迷路内のドットをすべて食べるとクリア！<br>
+          ・追いかけてくるゴースト（おばけ）に触れるとゲームオーバー。
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <footer id="game-footer"></footer>
+
+  <script src="../../js/common.js"></script>
+  <script>
+    (function() {
+      const canvas = document.getElementById('game-canvas');
+      const ctx = canvas.getContext('2d');
+      const scoreElem = document.getElementById('score');
+      const dotsLeftElem = document.getElementById('dots-left');
+      const highScoreElem = document.getElementById('high-score');
+
+      const GRID_SIZE = 15;
+      const CELL_SIZE = canvas.width / GRID_SIZE; // 27px
+
+      // 15x15 マップ (1: 壁, 0: ドット, 2: 空白/安全地帯)
+      const INITIAL_MAP = [
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        [1,0,0,0,0,0,1,0,0,0,0,0,0,0,1],
+        [1,0,1,1,0,1,1,0,1,1,0,1,1,0,1],
+        [1,0,1,1,0,0,0,0,0,0,0,1,1,0,1],
+        [1,0,0,0,0,1,1,2,1,1,0,0,0,0,1],
+        [1,1,1,0,1,1,2,2,2,1,1,0,1,1,1],
+        [1,0,0,0,0,1,2,2,2,1,0,0,0,0,1],
+        [1,0,1,1,0,1,1,1,1,1,0,1,1,0,1],
+        [1,0,0,1,0,0,0,0,0,0,0,1,0,0,1],
+        [1,1,0,1,0,1,1,0,1,1,0,1,0,1,1],
+        [1,0,0,0,0,0,1,0,1,0,0,0,0,0,1],
+        [1,0,1,1,1,0,1,0,1,0,1,1,1,0,1],
+        [1,0,1,0,0,0,0,0,0,0,0,0,1,0,1],
+        [1,0,0,0,1,1,1,0,1,1,1,0,0,0,1],
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+      ];
+
+      let map = [];
+      let totalDots = 0;
+      let score = 0;
+      let highScore = parseInt(localStorage.getItem('pacman_high_score') || '0', 10);
+      let isGameStarted = false;
+      let isGameOver = false;
+      let isClear = false;
+      let animationFrameId = null;
+      let mouthAngle = 0.2;
+      let mouthSpeed = 0.02;
+
+      highScoreElem.textContent = highScore;
+
+      // プレイヤー (Pacman)
+      let player = {
+        x: 1,
+        y: 1,
+        dirX: 0,
+        dirY: 0,
+        nextDirX: 0,
+        nextDirY: 0,
+        speed: 0.1
+      };
+
+      // ゴースト
+      let ghosts = [];
+      const GHOST_CONFIGS = [
+        { color: '#ef4444', startX: 7, startY: 5 }, // 赤
+        { color: '#ec4899', startX: 7, startY: 6 }, // ピンク
+        { color: '#06b6d4', startX: 7, startY: 7 }  // シアン
+      ];
+
+      function initGame() {
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+
+        // マップクローン & ドット数カウント
+        totalDots = 0;
+        map = INITIAL_MAP.map(row => [...row]);
+        for (let r = 0; r < GRID_SIZE; r++) {
+          for (let c = 0; c < GRID_SIZE; c++) {
+            if (map[r][c] === 0) totalDots++;
+          }
+        }
+
+        score = 0;
+        isGameStarted = true;
+        isGameOver = false;
+        isClear = false;
+
+        scoreElem.textContent = score;
+        dotsLeftElem.textContent = totalDots;
+
+        // プレイヤー初期化
+        player.x = 1;
+        player.y = 1;
+        player.dirX = 0;
+        player.dirY = 0;
+        player.nextDirX = 0;
+        player.nextDirY = 0;
+
+        // ゴースト初期化
+        ghosts = GHOST_CONFIGS.map(cfg => ({
+          x: cfg.startX,
+          y: cfg.startY,
+          dirX: 0,
+          dirY: -1,
+          color: cfg.color,
+          speed: 0.065
+        }));
+
+        gameLoop();
+      }
+
+      function canMove(gridX, gridY) {
+        if (gridX < 0 || gridX >= GRID_SIZE || gridY < 0 || gridY >= GRID_SIZE) return false;
+        return map[gridY][gridX] !== 1;
+      }
+
+      function updatePlayer() {
+        // グリッドの中心付近にいるときに方向変更を試みる
+        const isAtCenter = Math.abs((player.x % 1) - 0.5) < 0.1 && Math.abs((player.y % 1) - 0.5) < 0.1;
+
+        if (isAtCenter && (player.nextDirX !== 0 || player.nextDirY !== 0)) {
+          const currentGridX = Math.round(player.x - 0.5);
+          const currentGridY = Math.round(player.y - 0.5);
+          const targetGridX = currentGridX + player.nextDirX;
+          const targetGridY = currentGridY + player.nextDirY;
+
+          if (canMove(targetGridX, targetGridY)) {
+            player.dirX = player.nextDirX;
+            player.dirY = player.nextDirY;
+            player.x = currentGridX + 0.5;
+            player.y = currentGridY + 0.5;
+          }
+        }
+
+        // 移動試行
+        const nextX = player.x + player.dirX * player.speed;
+        const nextY = player.y + player.dirY * player.speed;
+        const checkGridX = Math.floor(nextX + player.dirX * 0.4);
+        const checkGridY = Math.floor(nextY + player.dirY * 0.4);
+
+        if (canMove(checkGridX, checkGridY)) {
+          player.x = nextX;
+          player.y = nextY;
+        } else {
+          // 壁に突き当たったら中心に補正して停止
+          player.x = Math.round(player.x - 0.5) + 0.5;
+          player.y = Math.round(player.y - 0.5) + 0.5;
+        }
+
+        // ドット取得判定
+        const gridX = Math.floor(player.x);
+        const gridY = Math.floor(player.y);
+        if (map[gridY] && map[gridY][gridX] === 0) {
+          map[gridY][gridX] = 2; // 空白化
+          score += 10;
+          totalDots--;
+          scoreElem.textContent = score;
+          dotsLeftElem.textContent = totalDots;
+
+          if (score > highScore) {
+            highScore = score;
+            highScoreElem.textContent = highScore;
+            localStorage.setItem('pacman_high_score', highScore.toString());
+          }
+
+          if (totalDots <= 0) {
+            isClear = true;
+          }
+        }
+
+        // 口のアニメーション
+        mouthAngle += mouthSpeed;
+        if (mouthAngle > 0.45 || mouthAngle < 0.05) {
+          mouthSpeed = -mouthSpeed;
+        }
+      }
+
+      function updateGhosts() {
+        ghosts.forEach(ghost => {
+          const isAtCenter = Math.abs((ghost.x % 1) - 0.5) < 0.08 && Math.abs((ghost.y % 1) - 0.5) < 0.08;
+
+          if (isAtCenter) {
+            const currentGridX = Math.round(ghost.x - 0.5);
+            const currentGridY = Math.round(ghost.y - 0.5);
+
+            // 移動可能な方向を探索
+            const possibleDirs = [];
+            const dirs = [
+              { x: 0, y: -1 },
+              { x: 0, y: 1 },
+              { x: -1, y: 0 },
+              { x: 1, y: 0 }
+            ];
+
+            dirs.forEach(d => {
+              // 逆走は避ける (他に行ける道がある場合)
+              if (d.x !== -ghost.dirX || d.y !== -ghost.dirY) {
+                if (canMove(currentGridX + d.x, currentGridY + d.y)) {
+                  possibleDirs.push(d);
+                }
+              }
+            });
+
+            if (possibleDirs.length === 0) {
+              // 行き止まりなら逆走許可
+              if (canMove(currentGridX - ghost.dirX, currentGridY - ghost.dirY)) {
+                possibleDirs.push({ x: -ghost.dirX, y: -ghost.dirY });
+              }
+            }
+
+            if (possibleDirs.length > 0) {
+              // 追跡傾向を出すため、プレイヤーに近い方向の優先度を高める
+              possibleDirs.sort((a, b) => {
+                const distA = Math.hypot((currentGridX + a.x) - player.x, (currentGridY + a.y) - player.y);
+                const distB = Math.hypot((currentGridX + b.x) - player.x, (currentGridY + b.y) - player.y);
+                return (Math.random() < 0.6) ? (distA - distB) : 0; // 60%の確率で最短ルート選択
+              });
+
+              ghost.dirX = possibleDirs[0].x;
+              ghost.dirY = possibleDirs[0].y;
+              ghost.x = currentGridX + 0.5;
+              ghost.y = currentGridY + 0.5;
+            }
+          }
+
+          ghost.x += ghost.dirX * ghost.speed;
+          ghost.y += ghost.dirY * ghost.speed;
+
+          // プレイヤーとの衝突判定
+          const dist = Math.hypot(ghost.x - player.x, ghost.y - player.y);
+          if (dist < 0.7) {
+            isGameOver = true;
+          }
+        });
+      }
+
+      function draw() {
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // マップ描画
+        for (let r = 0; r < GRID_SIZE; r++) {
+          for (let c = 0; c < GRID_SIZE; c++) {
+            const x = c * CELL_SIZE;
+            const y = r * CELL_SIZE;
+
+            if (map[r][c] === 1) {
+              // 壁
+              ctx.fillStyle = '#1e3a8a';
+              ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+              ctx.strokeStyle = '#3b82f6';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+            } else if (map[r][c] === 0) {
+              // ドット
+              ctx.fillStyle = '#fde047';
+              ctx.beginPath();
+              ctx.arc(x + CELL_SIZE / 2, y + CELL_SIZE / 2, 3.5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        }
+
+        // プレイヤー (Pacman) 描画
+        if (isGameStarted) {
+          const px = player.x * CELL_SIZE;
+          const py = player.y * CELL_SIZE;
+          let rotation = 0;
+
+          if (player.dirX === 1) rotation = 0;
+          else if (player.dirX === -1) rotation = Math.PI;
+          else if (player.dirY === 1) rotation = Math.PI / 2;
+          else if (player.dirY === -1) rotation = -Math.PI / 2;
+
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.rotate(rotation);
+
+          ctx.fillStyle = '#facc15';
+          ctx.beginPath();
+          ctx.arc(0, 0, CELL_SIZE / 2 - 2, mouthAngle * Math.PI, (2 - mouthAngle) * Math.PI);
+          ctx.lineTo(0, 0);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.restore();
+        }
+
+        // ゴースト描画
+        ghosts.forEach(ghost => {
+          const gx = ghost.x * CELL_SIZE;
+          const gy = ghost.y * CELL_SIZE;
+          const r = CELL_SIZE / 2 - 2;
+
+          ctx.save();
+          ctx.translate(gx, gy);
+
+          // 体
+          ctx.fillStyle = ghost.color;
+          ctx.beginPath();
+          ctx.arc(0, -2, r, Math.PI, 0, false);
+          ctx.lineTo(r, r);
+          // 下部のなみなみ
+          ctx.lineTo(r / 2, r - 3);
+          ctx.lineTo(0, r);
+          ctx.lineTo(-r / 2, r - 3);
+          ctx.lineTo(-r, r);
+          ctx.closePath();
+          ctx.fill();
+
+          // 目
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath();
+          ctx.arc(-r / 3, -r / 4, 3, 0, Math.PI * 2);
+          ctx.arc(r / 3, -r / 4, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 黒目
+          ctx.fillStyle = '#1e293b';
+          ctx.beginPath();
+          ctx.arc(-r / 3 + ghost.dirX * 1.5, -r / 4 + ghost.dirY * 1.5, 1.5, 0, Math.PI * 2);
+          ctx.arc(r / 3 + ghost.dirX * 1.5, -r / 4 + ghost.dirY * 1.5, 1.5, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.restore();
+        });
+
+        // オーバーレイ描画
+        if (!isGameStarted) {
+          drawOverlay('ドットイート', 'タップまたは操作キーでスタート');
+        } else if (isGameOver) {
+          drawOverlay('GAME OVER', `SCORE: ${score}`);
+        } else if (isClear) {
+          drawOverlay('ALL CLEAR! 🎉', `EXCELLENT! SCORE: ${score}`);
+        }
+      }
+
+      function drawOverlay(title, subtitle) {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 26px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(title, canvas.width / 2, canvas.height / 2 - 15);
+
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '14px sans-serif';
+        ctx.fillText(subtitle, canvas.width / 2, canvas.height / 2 + 25);
+      }
+
+      function gameLoop() {
+        if (isGameStarted && !isGameOver && !isClear) {
+          updatePlayer();
+          updateGhosts();
+        }
+        draw();
+        if (isGameStarted && !isGameOver && !isClear) {
+          animationFrameId = requestAnimationFrame(gameLoop);
+        }
+      }
+
+      function setDirection(dx, dy) {
+        if (!isGameStarted || isGameOver || isClear) {
+          initGame();
+          return;
+        }
+        player.nextDirX = dx;
+        player.nextDirY = dy;
+      }
+
+      // キー操作
+      window.addEventListener('keydown', (e) => {
+        switch (e.key) {
+          case 'ArrowUp':
+          case 'w':
+          case 'W':
+            setDirection(0, -1);
+            e.preventDefault();
+            break;
+          case 'ArrowDown':
+          case 's':
+          case 'S':
+            setDirection(0, 1);
+            e.preventDefault();
+            break;
+          case 'ArrowLeft':
+          case 'a':
+          case 'A':
+            setDirection(-1, 0);
+            e.preventDefault();
+            break;
+          case 'ArrowRight':
+          case 'd':
+          case 'D':
+            setDirection(1, 0);
+            e.preventDefault();
+            break;
+        }
+      });
+
+      // ボタンタッチ操作
+      const bindBtn = (id, dx, dy) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener('pointerdown', (e) => {
+          e.preventDefault();
+          setDirection(dx, dy);
+        });
+      };
+
+      bindBtn('btn-up', 0, -1);
+      bindBtn('btn-down', 0, 1);
+      bindBtn('btn-left', -1, 0);
+      bindBtn('btn-right', 1, 0);
+
+      canvas.addEventListener('pointerdown', () => {
+        if (!isGameStarted || isGameOver || isClear) {
+          initGame();
+        }
+      });
+
+      // 共通リセット関数
+      window.resetGame = function() {
+        initGame();
+      };
+
+      // 初期描写
+      map = INITIAL_MAP.map(row => [...row]);
+      draw();
+    })();
+  </script>
+</body>
+</html>
